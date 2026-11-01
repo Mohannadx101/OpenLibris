@@ -3,9 +3,14 @@ import { app, BrowserWindow, dialog } from 'electron'
 import { openDatabase } from './db/connection'
 import type { Db } from './db/connection'
 import { loadBundledMigrations, runMigrations } from './db/migrate'
-import { createHandlers } from './ipc/appHandlers'
+import { pickBookFiles } from './dialogs'
+import { createHandlers } from './ipc/handlers'
 import { registerIpcHandlers } from './ipc/register'
 import { ensureAppDirs, resolveAppPaths } from './paths'
+import { BooksRepository } from './repositories/booksRepository'
+import { ReadingStateRepository } from './repositories/readingStateRepository'
+import { LibraryService } from './services/library/libraryService'
+import { ReadingService } from './services/reading/readingService'
 import { registerLibraryProtocol, registerLibrarySchemePrivileges } from './protocol'
 import { createAppUrlGuard } from './security'
 import { createMainWindow, installContentSecurityPolicy } from './window'
@@ -42,12 +47,22 @@ function bootstrap(): () => BrowserWindow {
 
   registerLibraryProtocol(paths.libraryDir)
   installContentSecurityPolicy(devServerUrl)
+  const books = new BooksRepository(db)
+  const library = new LibraryService({ books, libraryDir: paths.libraryDir })
+  const reading = new ReadingService({
+    books,
+    reading: new ReadingStateRepository(db),
+    libraryDir: paths.libraryDir,
+  })
   registerIpcHandlers(
     createHandlers({
       db,
       appName: app.getName(),
       appVersion: app.getVersion(),
       dataDir: paths.dataDir,
+      library,
+      reading,
+      pickBookFiles: () => pickBookFiles(mainWindow),
     }),
     isAppUrl,
   )

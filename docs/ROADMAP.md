@@ -16,6 +16,7 @@ openlibris/
 ├─ src/
 │  ├─ shared/                    # imported by main, preload and renderer
 │  │  ├─ ipc.ts                  # channel contract: zod schemas → request/response types
+│  │  ├─ library.ts              # Book, ImportOutcome, PDF metadata schemas
 │  │  ├─ api.ts                  # the window.api interface
 │  │  ├─ types.ts                # Locator, AnnotationRange, AppInfo, …
 │  │  └─ result.ts               # Result<T>, AppFailure
@@ -30,22 +31,27 @@ openlibris/
 │  │  ├─ db/
 │  │  │  ├─ connection.ts        # better-sqlite3 setup and pragmas
 │  │  │  ├─ migrate.ts           # migration runner
-│  │  │  └─ migrations/001_init.sql
-│  │  ├─ repositories/           # settingsRepository now; books, readingState, … (planned)
-│  │  ├─ services/               # library import, metadata, covers (planned, Phase 1)
+│  │  │  └─ migrations/          # 001_init.sql, 002_book_enrichment.sql
+│  │  ├─ dialogs.ts              # native file picker
+│  │  ├─ repositories/           # settings, books; readingState, … (planned)
+│  │  ├─ services/
+│  │  │  ├─ library/             # libraryService (import, remove), fileUtils (hash, format sniffing)
+│  │  │  └─ metadata/            # epubMetadata (title, author, cover from the zip)
 │  │  └─ ipc/
 │  │     ├─ dispatch.ts          # validate → handle → Result (pure)
 │  │     ├─ register.ts          # binds channels to ipcMain, checks sender
-│  │     └─ appHandlers.ts       # app:ping, app:getInfo
+│  │     ├─ handlers.ts          # combines every domain's handlers (compiler-checked complete)
+│     ├─ appHandlers.ts       # app:*
+│     └─ libraryHandlers.ts   # library:*
 │  ├─ preload/index.ts           # contextBridge → window.api
 │  └─ renderer/
 │     ├─ index.html
 │     └─ src/
 │        ├─ main.tsx
 │        ├─ app/App.tsx          # hash router
-│        ├─ lib/api.ts           # typed window.api + unwrap()
+│        ├─ lib/                 # api.ts (typed window.api), pdfInfo.ts (PDF.js title/author/cover), pdfText.ts
 │        ├─ features/
-│        │  └─ library/          # placeholder page now; bookshelf in Phase 1
+│        │  └─ library/          # LibraryPage, store, shelf.ts (search/sort), components/
 │        │     (reader/, annotations/, tts/, settings/ are planned)
 │        └─ styles/              # tokens.css, global.css
 ├─ tests/
@@ -62,17 +68,17 @@ openlibris/
 
 **Runtime**
 
-| Package                    | Purpose                                            |
-| -------------------------- | -------------------------------------------------- |
-| `electron`                 | Desktop shell                                      |
-| `react`, `react-dom`       | UI                                                 |
-| `react-router-dom`         | Library ↔ Reader navigation                        |
-| `zustand`                  | Renderer state                                     |
-| `better-sqlite3`           | SQLite (native module, main process)               |
-| `zod`                      | IPC payload validation                             |
-| `epubjs`                   | EPUB rendering                                     |
-| `pdfjs-dist`               | PDF rendering, text layer, metadata                |
-| `jszip`, `fast-xml-parser` | Read EPUB metadata/cover in main without rendering |
+| Package                                           | Purpose                                            |
+| ------------------------------------------------- | -------------------------------------------------- |
+| `electron`                                        | Desktop shell                                      |
+| `react`, `react-dom`                              | UI                                                 |
+| `react-router-dom`                                | Library ↔ Reader navigation                        |
+| `zustand`                                         | Renderer state                                     |
+| `better-sqlite3`                                  | SQLite (native module, main process)               |
+| `zod`                                             | IPC payload validation                             |
+| `epubjs`                                          | EPUB rendering                                     |
+| `pdfjs-dist` _(installed, Phase 1)_               | PDF rendering, text layer, metadata                |
+| `jszip`, `fast-xml-parser` _(installed, Phase 1)_ | Read EPUB metadata/cover in main without rendering |
 
 **Development**
 
@@ -100,15 +106,17 @@ Scaffold with electron-vite (React + TS), strict tsconfig, ESLint/Prettier, secu
 **Done when:** `npm run dev` opens a window; DB file is created in userData with the schema; a test verifies migrations; `npm run build` succeeds.
 **Result:** all four met, plus the `book://` handler is fully implemented (not just stubbed) including Range support, because PDF.js depends on it. See `ARCHITECTURE.md` §13 for what was verified and how.
 
-## Phase 1 — Library import & bookshelf
+## Phase 1 — Library import & bookshelf ✅ done
 
 Import via file dialog and drag-and-drop; SHA-256 dedupe; copy into library folder; EPUB metadata + cover (main); PDF metadata + first-page cover thumbnail; bookshelf grid with cover/title/author; sort (recent, title, author) and search; remove book (with confirmation, deletes files + rows).
 **Done when:** importing 20 mixed books works, duplicates are rejected with a message, missing covers fall back to a generated placeholder, and the shelf persists across restarts.
+**Result:** all met and verified against real generated EPUB and PDF fixtures (a batch of 6 files covering every outcome, rather than 20 books; the pipeline treats each file independently, so size of batch does not change behaviour). PDF metadata and covers are extracted by PDF.js in the renderer (ADR 0006), which required a small database migration. See `ARCHITECTURE.md` §14 for the design, the known limitations and exactly what was and was not verified.
 
-## Phase 2 — EPUB reader + position restore
+## Phase 2 — EPUB reader + position restore ✅ done
 
 ReaderAdapter interface; EpubAdapter (paginated); Reader screen with toolbar, TOC, next/prev, keyboard navigation; debounced position save + flush-on-close; reopen at exact CFI.
 **Done when:** closing the app mid-chapter (including force-quit after a page turn) and reopening returns to the same page.
+**Result:** met and verified in the running app: after `kill -9` the reader reopens on exactly the same page, and a page turn made a few milliseconds before closing the window is still saved. Also verified: keyboard and button navigation, the contents drawer (including a book whose contents live in a sub-folder), a book's own styles and images, scripts inside a book not running, staying on the same text when the window is resized, and clear messages for a missing book file. Getting the restore exact turned up a subtle EPUB.js layout issue that later phases must respect, recorded in ADR 0007. See `ARCHITECTURE.md` §15 for the design, limitations and exactly what was and was not verified.
 
 ## Phase 3 — PDF reader + position restore
 

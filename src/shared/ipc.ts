@@ -1,4 +1,6 @@
 import { z } from 'zod'
+import { bookSchema, importResultSchema, pdfMetadataSchema } from './library'
+import { openedBookSchema, savePositionSchema } from './reading'
 
 /**
  * The single source of truth for every IPC channel.
@@ -24,6 +26,38 @@ export const ipcSchemas = {
       schemaVersion: z.number().int().nonnegative(),
       dataDir: z.string(),
     }),
+  },
+  'library:list': {
+    request: z.undefined(),
+    response: z.array(bookSchema),
+  },
+  /** Opens the system file dialog, then imports whatever the user chose. */
+  'library:importFromDialog': {
+    request: z.undefined(),
+    response: importResultSchema,
+  },
+  /** Imports files the user dropped onto the window. */
+  'library:importPaths': {
+    request: z.object({ paths: z.array(z.string().min(1).max(4096)).min(1).max(500) }),
+    response: importResultSchema,
+  },
+  'library:remove': {
+    request: z.object({ id: z.string().uuid() }),
+    response: z.null(),
+  },
+  /** Delivers the title, author and cover that PDF.js extracted in the renderer. */
+  'library:completePdfMetadata': {
+    request: pdfMetadataSchema,
+    response: bookSchema,
+  },
+  /** Opens a book for reading: marks it as opened and returns where the user left off. */
+  'reading:open': {
+    request: z.object({ bookId: z.string().uuid() }),
+    response: openedBookSchema,
+  },
+  'reading:save': {
+    request: savePositionSchema,
+    response: z.null(),
   },
 } as const
 

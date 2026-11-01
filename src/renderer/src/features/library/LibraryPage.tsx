@@ -1,62 +1,128 @@
-import { useEffect, useState } from 'react'
-import { api, unwrap } from '@renderer/lib/api'
-import type { AppInfo } from '@shared/types'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { api } from '@renderer/lib/api'
+import type { Book } from '@shared/library'
+import { Bookshelf } from './components/Bookshelf'
+import { ConfirmRemoveDialog } from './components/ConfirmRemoveDialog'
+import { DropOverlay } from './components/DropOverlay'
+import { EmptyState } from './components/EmptyState'
+import { ErrorBanner } from './components/ErrorBanner'
+import { ImportReport } from './components/ImportReport'
+import { LibraryToolbar } from './components/LibraryToolbar'
+import { visibleBooks } from './shelf'
+import type { SortKey } from './shelf'
+import { useLibrary } from './store'
 import styles from './LibraryPage.module.css'
 
-type Status =
-  { state: 'loading' } | { state: 'ready'; info: AppInfo } | { state: 'error'; message: string }
+/** True when a drag carries files from the operating system (not, say, selected text). */
+function dragHasFiles(event: DragEvent): boolean {
+  return event.dataTransfer?.types.includes('Files') ?? false
+}
 
-/**
- * Phase 0 placeholder. The status line proves the whole chain works end to end:
- * React -> preload bridge -> validated IPC -> main process -> SQLite.
- * Phase 1 replaces the empty state with the bookshelf.
- */
 export function LibraryPage() {
-  const [status, setStatus] = useState<Status>({ state: 'loading' })
+  const {
+    books,
+    loadState,
+    error,
+    importing,
+    report,
+    load,
+    importFromDialog,
+    importPaths,
+    remove,
+    dismissReport,
+    dismissError,
+  } = useLibrary()
+
+  const [query, setQuery] = useState('')
+  const [sort, setSort] = useState<SortKey>('recent')
+  const [pendingRemoval, setPendingRemoval] = useState<Book | null>(null)
+  const [dragging, setDragging] = useState(false)
 
   useEffect(() => {
-    let cancelled = false
+    void load()
+  }, [load])
 
-    async function check() {
-      try {
-        const pong = unwrap(await api.app.ping({ message: 'hello' }))
-        const info = unwrap(await api.app.getInfo())
-        if (!cancelled && pong.reply === 'pong: hello') setStatus({ state: 'ready', info })
-      } catch (error) {
-        if (!cancelled) {
-          setStatus({
-            state: 'error',
-            message: error instanceof Error ? error.message : String(error),
-          })
-        }
-      }
+  // Files dropped on the window are imported. The preload reads the paths; this only shows
+  // the overlay while a drag is over the window.
+  useEffect(() => {
+    const stopListening = api.library.onFilesDropped((paths) => void importPaths(paths))
+
+    let depth = 0
+    const enter = (event: DragEvent) => {
+      if (!dragHasFiles(event)) return
+      depth++
+      setDragging(true)
+    }
+    const leave = (event: DragEvent) => {
+      if (!dragHasFiles(event)) return
+      depth = Math.max(0, depth - 1)
+      if (depth === 0) setDragging(false)
+    }
+    const end = () => {
+      depth = 0
+      setDragging(false)
     }
 
-    void check()
+    window.addEventListener('dragenter', enter)
+    window.addEventListener('dragleave', leave)
+    window.addEventListener('drop', end)
     return () => {
-      cancelled = true
+      stopListening()
+      window.removeEventListener('dragenter', enter)
+      window.removeEventListener('dragleave', leave)
+      window.removeEventListener('drop', end)
     }
-  }, [])
+  }, [importPaths])
+
+  const shown = useMemo(() => visibleBooks(books, query, sort), [books, query, sort])
+
+  const confirmRemoval = useCallback(
+    (book: Book) => {
+      setPendingRemoval(null)
+      void remove(book.id)
+    },
+    [remove],
+  )
+
+  const loading = loadState === 'idle' || loadState === 'loading'
 
   return (
     <main className={styles.page}>
-      <header className={styles.header}>
-        <h1>Library</h1>
-      </header>
+      <LibraryToolbar
+        bookCount={books.length}
+        query={query}
+        sort={sort}
+        importing={importing}
+        onQueryChange={setQuery}
+        onSortChange={setSort}
+        onAddBooks={() => void importFromDialog()}
+      />
 
-      <section className={styles.empty}>
-        <h2>Your bookshelf is empty</h2>
-        <p>Importing EPUB and PDF books arrives in the next phase.</p>
-      </section>
+      {error && <ErrorBanner message={error} onDismiss={dismissError} />}
+      {report && <ImportReport outcomes={report} onDismiss={dismissReport} />}
 
-      <p className={styles.status} role="status">
-        {status.state === 'loading' && 'Connecting to the app core…'}
-        {status.state === 'ready' &&
-          `${status.info.name} ${status.info.version} · database schema v${status.info.schemaVersion} · ${status.info.dataDir}`}
-        {status.state === 'error' && (
-          <span className={styles.error}>Could not reach the app core: {status.message}</span>
-        )}
-      </p>
+      {loading ? null : books.length === 0 ? (
+        loadState === 'ready' && (
+          <EmptyState
+            filtered={false}
+            importing={importing}
+            onAddBooks={() => void importFromDialog()}
+          />
+        )
+      ) : shown.length === 0 ? (
+        <EmptyState filtered importing={importing} onAddBooks={() => void importFromDialog()} />
+      ) : (
+        <div className={styles.scroll}>
+          <Bookshelf books={shown} onRemove={setPendingRemoval} />
+        </div>
+      )}
+
+      <ConfirmRemoveDialog
+        book={pendingRemoval}
+        onConfirm={confirmRemoval}
+        onCancel={() => setPendingRemoval(null)}
+      />
+      {dragging && <DropOverlay />}
     </main>
   )
 }

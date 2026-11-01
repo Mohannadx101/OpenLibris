@@ -4,6 +4,11 @@ import { isAbsolute, join, relative, sep } from 'node:path'
 export const LIBRARY_SCHEME = 'book'
 const LIBRARY_HOST = 'library'
 
+/** The URL the renderer uses for a file stored at `relativePath` (e.g. `<id>/cover.jpg`). */
+export function libraryUrlFor(relativePath: string): string {
+  return `${LIBRARY_SCHEME}://${LIBRARY_HOST}/${relativePath}`
+}
+
 // book://library/<bookId>/<file>. Only these exact shapes are ever served: a UUID folder and
 // one of the known file names. Anything else, including any `..` trick, simply does not match.
 const LIBRARY_PATH =

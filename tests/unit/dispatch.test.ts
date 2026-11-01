@@ -13,6 +13,19 @@ function makeHandlers(overrides: Partial<Handlers> = {}): Handlers {
       schemaVersion: 1,
       dataDir: '/tmp',
     }),
+    // Library channels are not exercised here; see libraryHandlers.test.ts.
+    'library:list': () => [],
+    'library:importFromDialog': () => ({ canceled: true, outcomes: [] }),
+    'library:importPaths': () => ({ canceled: false, outcomes: [] }),
+    'library:remove': () => null,
+    'library:completePdfMetadata': () => {
+      throw new Error('not used')
+    },
+    // Reading channels are not exercised here; see readingHandlers.test.ts.
+    'reading:open': () => {
+      throw new Error('not used')
+    },
+    'reading:save': () => null,
     ...overrides,
   }
 }

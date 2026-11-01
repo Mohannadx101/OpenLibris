@@ -1,6 +1,10 @@
 import { join } from 'node:path'
 import { BrowserWindow, session, shell } from 'electron'
+import { waitForRendererFlush } from './flush'
 import { buildContentSecurityPolicy } from './security'
+
+/** Longest the window waits for the page to finish saving before closing anyway. */
+const CLOSE_FLUSH_TIMEOUT_MS = 2000
 
 export interface WindowOptions {
   /** Vite dev server URL (set by electron-vite in development), if any. */
@@ -51,6 +55,18 @@ export function createMainWindow({
   })
 
   window.once('ready-to-show', () => window.show())
+
+  // Before the window closes, give the page a moment to save what it has not saved yet (the
+  // reading position). The second `close` goes straight through.
+  let readyToClose = false
+  window.on('close', (event) => {
+    if (readyToClose) return
+    event.preventDefault()
+    readyToClose = true
+    void waitForRendererFlush(window.webContents, CLOSE_FLUSH_TIMEOUT_MS, isAppUrl).finally(() => {
+      if (!window.isDestroyed()) window.close()
+    })
+  })
 
   // The app is a single page. Never let it navigate to, or spawn, anything else.
   window.webContents.on('will-navigate', (event, url) => {

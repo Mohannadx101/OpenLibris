@@ -1,0 +1,52 @@
+.dialog {
+  max-width: 420px;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: 0 20px 50px rgb(43 38 32 / 0.3);
+}
+
+.dialog::backdrop {
+  background: rgb(43 38 32 / 0.45);
+}
+
+.dialog h2 {
+  margin: 0 0 var(--space-2);
+  font-family: var(--font-reading);
+  font-size: 20px;
+}
+
+.dialog p {
+  margin: 0 0 var(--space-4);
+  color: var(--color-text-muted);
+}
+
+.dialog strong {
+  color: var(--color-text);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.actions button {
+  height: 34px;
+  padding: 0 var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.actions .danger {
+  border-color: #a3321f;
+  background: #a3321f;
+  color: #fff;
+  font-weight: 600;
+}

@@ -6,6 +6,7 @@ export default defineConfig({
     alias: {
       '@shared': resolve(import.meta.dirname, 'src/shared'),
       '@main': resolve(import.meta.dirname, 'src/main'),
+      '@renderer': resolve(import.meta.dirname, 'src/renderer/src'),
     },
   },
   test: {

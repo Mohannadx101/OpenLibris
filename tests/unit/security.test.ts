@@ -10,15 +10,22 @@ describe('buildContentSecurityPolicy', () => {
     expect(production).not.toContain('unsafe-eval')
   })
 
-  it('locks down plugins, base URL, forms and frames', () => {
-    for (const directive of [
-      "object-src 'none'",
-      "base-uri 'none'",
-      "form-action 'none'",
-      "frame-src 'none'",
-    ]) {
+  it('locks down plugins, forms and frames', () => {
+    for (const directive of ["object-src 'none'", "form-action 'none'", "frame-src 'none'"]) {
       expect(production).toContain(directive)
     }
+  })
+
+  it('allows only what showing an EPUB needs: blob styles and fonts, and its own base tag', () => {
+    // EPUB.js turns a book's stylesheets and fonts into blob URLs and adds a <base> tag.
+    expect(production).toMatch(/style-src[^;]*blob:/)
+    expect(production).toMatch(/font-src[^;]*blob:/)
+    expect(production).toContain("base-uri 'self'")
+
+    // ...and nothing else came along with it.
+    expect(production).not.toMatch(/(script-src|default-src|connect-src)[^;]*blob:/)
+    expect(production).not.toMatch(/img-src[^;]*\*/)
+    expect(production).not.toMatch(/https?:\/\//)
   })
 
   it('lets the renderer read from the library scheme but not from the network', () => {

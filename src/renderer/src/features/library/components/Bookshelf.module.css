@@ -1,0 +1,8 @@
+.grid {
+  list-style: none;
+  margin: 0;
+  padding: var(--space-3) 0 var(--space-5);
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--space-4) var(--space-4);
+}

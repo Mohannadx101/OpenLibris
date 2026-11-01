@@ -1,0 +1,22 @@
+.banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid #e3b5ab;
+  border-radius: var(--radius);
+  background: #fbeeea;
+  color: #7d2415;
+  font-size: 13px;
+}
+
+.banner button {
+  border: 0;
+  background: none;
+  color: inherit;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}

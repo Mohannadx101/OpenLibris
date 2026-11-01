@@ -117,6 +117,34 @@ describe('schema behaviour', () => {
   })
 })
 
+describe('upgrading an existing library', () => {
+  it('keeps existing books when migration 002 is applied, with the new flag off', () => {
+    const migrations = loadBundledMigrations()
+    runMigrations(db, migrations.slice(0, 1)) // a library created by Phase 0
+    db.prepare(
+      `INSERT INTO books (id, content_hash, format, title, file_path, file_size, added_at)
+       VALUES ('b1', 'h', 'pdf', 'Old Book', 'b1/book.pdf', 10, 1)`,
+    ).run()
+
+    expect(runMigrations(db, migrations)).toBe(migrations.length)
+
+    const row = db.prepare("SELECT title, needs_enrichment FROM books WHERE id = 'b1'").get()
+    expect(row).toEqual({ title: 'Old Book', needs_enrichment: 0 })
+  })
+
+  it('only allows 0 or 1 in the enrichment flag', () => {
+    runMigrations(db, loadBundledMigrations())
+    expect(() =>
+      db
+        .prepare(
+          `INSERT INTO books (id, content_hash, format, title, file_path, file_size, added_at, needs_enrichment)
+           VALUES ('b', 'h', 'pdf', 't', 'p', 1, 1, 2)`,
+        )
+        .run(),
+    ).toThrow(/CHECK/)
+  })
+})
+
 describe('runMigrations', () => {
   const migrations = [
     { version: 1, name: 'one', sql: 'CREATE TABLE one (id INTEGER);' },

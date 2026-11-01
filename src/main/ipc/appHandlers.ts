@@ -1,6 +1,6 @@
 import type { Db } from '../db/connection'
 import { getSchemaVersion } from '../db/migrate'
-import type { Handlers } from './dispatch'
+import type { ChannelsOf, HandlersFor } from './dispatch'
 
 export interface AppHandlerDeps {
   db: Db
@@ -9,8 +9,7 @@ export interface AppHandlerDeps {
   dataDir: string
 }
 
-/** Handlers for the `app:*` channels. Later phases add library, reading, annotations, … */
-export function createHandlers(deps: AppHandlerDeps): Handlers {
+export function createAppHandlers(deps: AppHandlerDeps): HandlersFor<ChannelsOf<'app'>> {
   return {
     'app:ping': ({ message }) => ({ reply: `pong: ${message}`, receivedAt: Date.now() }),
 

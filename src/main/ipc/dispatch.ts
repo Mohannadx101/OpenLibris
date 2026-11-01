@@ -7,9 +7,14 @@ import type { Result } from '@shared/result'
  * One handler per channel. Because this is a mapped type over every channel in the contract,
  * adding a channel to `src/shared/ipc.ts` without implementing it is a compile error.
  */
-export type Handlers = {
-  [C in IpcChannel]: (request: IpcRequest<C>) => IpcResponse<C> | Promise<IpcResponse<C>>
+export type HandlersFor<C extends IpcChannel> = {
+  [K in C]: (request: IpcRequest<K>) => IpcResponse<K> | Promise<IpcResponse<K>>
 }
+
+export type Handlers = HandlersFor<IpcChannel>
+
+/** The channels of one domain, e.g. ChannelsOf<'library'> is every `library:*` channel. */
+export type ChannelsOf<Domain extends string> = Extract<IpcChannel, `${Domain}:${string}`>
 
 /**
  * Validates a raw request, runs the matching handler, and converts the outcome (including any

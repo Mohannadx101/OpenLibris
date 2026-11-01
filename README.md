@@ -2,7 +2,7 @@
 
 A local-first desktop book reader for EPUB and PDF. Your books, reading positions, bookmarks, highlights and notes stay on your computer.
 
-> **Status:** early development. Phase 0 (foundation) is complete: the app opens, the database and IPC layer work, and security boundaries are in place. There is no importing or reading yet. See [`docs/ROADMAP.md`](docs/ROADMAP.md).
+> **Status:** early development. You can import EPUB and PDF books (file dialog or drag and drop), browse them on a bookshelf with search and sorting, and read EPUBs with your exact page remembered between sessions. PDF reading, bookmarks, highlights, text-to-speech and bedtime mode are not built yet. See [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## Planned features
 

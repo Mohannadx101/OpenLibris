@@ -8,11 +8,7 @@
 
 export type BookFormat = 'epub' | 'pdf'
 
-/** A saved reading position. Format-specific so it survives layout changes. */
-export type Locator =
-  | { format: 'epub'; cfi: string }
-  /** `offsetY` is the fractional position within the page, 0..1. */
-  | { format: 'pdf'; page: number; offsetY: number }
+export type { Locator } from './reading'
 
 /** A highlighted span of text. Redrawable at any font size or zoom level. */
 export type AnnotationRange =
@@ -29,3 +25,6 @@ export interface AppInfo {
   /** Absolute path of the folder holding the database and the book library. */
   dataDir: string
 }
+
+/** File extensions the library accepts, lower-case, without the dot. */
+export const BOOK_EXTENSIONS = ['epub', 'pdf'] as const

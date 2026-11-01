@@ -1,6 +1,6 @@
 # Architecture — OpenLibris
 
-Status: **Approved. Phase 0 (foundation) is implemented and verified**; see §13. The decisions in §11 are settled.
+Status: **Approved. Phases 0 (foundation) and 1 (library import and bookshelf) are implemented and verified**; see §13 and §14. The decisions in §11 are settled.
 
 ## 1. Goals and constraints
 
@@ -63,7 +63,7 @@ Electron has two kinds of process. We give each a clear job.
 
 **Decision: copy books into the library** rather than referencing their original path. The library then survives the user moving or deleting their Downloads folder, and backup is a single folder. Duplicates are detected by SHA-256 of the file. _(Settled — see §11.)_
 
-### Schema (initial)
+### Schema
 
 ```sql
 books (
@@ -77,7 +77,8 @@ books (
   cover_path TEXT,
   file_size INTEGER NOT NULL,
   added_at INTEGER NOT NULL,
-  last_opened_at INTEGER
+  last_opened_at INTEGER,
+  needs_enrichment INTEGER NOT NULL DEFAULT 0  -- added in migration 002, see §14
 );
 
 reading_state (
@@ -155,14 +156,16 @@ interface ReaderAdapter {
 }
 ```
 
+Phase 2 implements the subset the reader needs now: `open`, `next`, `prev`, `goTo(href)`, `toc`, `onPosition` (in place of `onRelocated`), `onKey`, `resize` and `destroy`. Selection, highlights, appearance and narration members arrive in the phases that need them. See §15 and ADR 0007.
+
 This isolates library quirks. If EPUB.js proves limiting (it has had slow maintenance), it can be replaced (e.g. by foliate-js) by writing one new adapter.
 
 ## 7. Position saving (reliability)
 
-1. Adapter emits `relocated` → renderer debounces 750 ms → `api.reading.saveState`.
-2. On window close / app quit, main sends `reader:flush` and waits (with a short timeout) for the final save before closing.
+1. The adapter emits a position (CFI + approximate progress) → the renderer's `PositionSaver` debounces 400 ms → `api.reading.save` (`reading:save`).
+2. The pending position is also flushed when the reader screen is left and when the window is hidden. On window close, main sends `app:before-close`, the page flushes and replies `app:flush-done`, and the window closes (after at most 2 s, so a stuck page cannot keep it open).
 3. SQLite runs in WAL mode with `synchronous = NORMAL`; a write that returns is durable across an app crash.
-4. On open, the stored locator is passed to `adapter.open()` so the first render is already at the right place (no jump).
+4. On open, `reading:open` returns the book and its stored locator, and the locator is passed to `adapter.open()` so the first render is already at the right place (no jump).
 
 ## 8. Text-to-speech
 
@@ -202,7 +205,7 @@ This isolates library quirks. If EPUB.js proves limiting (it has had slow mainte
 - Navigation away from the app is blocked, and `window.open` is denied; `https` links open in the system browser.
 - IPC requests are rejected unless they originate from the app's own page.
 - The `book://` handler serves only `<uuid>/book.(epub|pdf)` and `<uuid>/cover.(jpg|png|webp)` inside the library folder.
-- EPUB content renders in sandboxed iframes (EPUB.js default); scripts inside EPUBs are disabled.
+- EPUB content renders in sandboxed iframes (EPUB.js `srcdoc` frames, `allow-same-origin` only); scripts inside EPUBs are disabled. The page policy allows `blob:` styles and fonts and `base-uri 'self'` solely for EPUB.js (ADR 0007, tested).
 - All IPC payloads validated with zod.
 
 Everything above marked as enforced by the main process is covered by unit tests and was also checked against the running app (see §13).
@@ -220,3 +223,55 @@ What exists today, and the non-obvious choices behind it.
 - **A second app instance is refused** (`requestSingleInstanceLock`), because two processes writing one database is a reliability risk.
 - **Startup failures are loud.** A failed migration or unreadable database shows an error dialog and exits, rather than opening a blank window.
 - **Verification performed:** typecheck, lint, 58 unit tests, production build, and a headless run of the built app that checked rendering, IPC round trips, renderer isolation (`require`/`process` undefined), CSP enforcement (eval, inline scripts and network requests blocked), `book://` (200, 206, suffix range, 416, 404, traversal refused), navigation blocking, and that the database is created with the schema. `npm run dev` was verified the same way.
+
+## 14. Phase 1 implementation notes
+
+**Import pipeline** (`src/main/services/library/libraryService.ts`). For each file, one at a time:
+
+1. Validate: absolute path, regular file, not empty, `.epub` or `.pdf`, and the first bytes really are a PDF header or a zip. The extension alone is never trusted.
+2. Hash (SHA-256, streamed). If the hash is already in the library the file is reported as a duplicate, naming the existing book.
+3. Create `library/<uuid>/`, copy the file in, and check the copy's size.
+4. EPUB: read title, author, language and cover (below). PDF: see "PDF metadata" below.
+5. Insert the row.
+
+Any failure after step 3 deletes the new folder, so a failed import leaves nothing behind. Files are processed sequentially, so two identical files in one batch resolve to one book and one duplicate, and one bad file never affects the others. Outcomes are returned per file as `imported`, `duplicate` or `failed` with a plain-language reason; internal error details stay in the main-process log.
+
+**EPUB metadata** (`services/metadata/epubMetadata.ts`) is read in the main process from the zip alone, with no rendering: `container.xml` → package document → `dc:title`, `dc:creator` (authors only, skipping illustrators and translators), `dc:language`. The cover is found by the EPUB 3 `cover-image` property, then the EPUB 2 `<meta name="cover">` convention, then a manifest image whose id looks like a cover. Cover bytes are identified by content, not by the manifest's declared media type, because declared types are sometimes wrong. Entry paths that escape the archive are refused, and oversized XML or image entries are skipped.
+
+**PDF metadata** needs PDF.js, which runs in the renderer (see ADR 0006). A PDF is imported immediately with a title taken from its file name and `needs_enrichment = 1`. The renderer then opens it over `book://`, reads the Info/XMP title, author and language, renders page 1 to a JPEG, and sends the result to `library:completePdfMetadata`. Main only accepts this for a book still flagged, so a compromised renderer cannot later rewrite book details, and it checks that the "cover" really is a JPEG, PNG or WebP before storing it. If extraction fails, the flag is cleared and the book keeps its file-name title and a generated placeholder. Because the flag lives in the database, a PDF whose extraction was interrupted (app closed, crash) is finished automatically on the next start.
+
+**Drag and drop.** The renderer never sees file paths. The preload script listens for `drop` events, ignores any that are not real user input (`isTrusted`), reads the paths with Electron's `webUtils.getPathForFile`, and hands the renderer only a list of paths to import. The paths still pass through the same validation as the file dialog.
+
+**Renderer.** `features/library/` holds the page, a zustand store, and small components. Search, sorting and size formatting are pure functions in `shelf.ts` with unit tests. The store owns the PDF extraction queue and guarantees it runs one book at a time and never twice for the same book.
+
+**Known limitations** (deliberate, to be revisited where noted):
+
+- Covers in GIF or SVG (rare in EPUBs) are not served; those books get the generated placeholder. The library only serves JPEG, PNG and WebP.
+- PDFs whose page 1 relies on JPEG 2000 or JBIG2 images may get a blank cover, because PDF.js's WebAssembly decoders are disabled (they need CSP and asset changes). Title and author are unaffected. Revisit in Phase 3 when PDF rendering is built properly.
+- Import has no per-file progress: the shelf shows "Importing…" until the whole batch finishes. Fine for normal use; worth improving if bulk-importing hundreds of books is common.
+- An EPUB is read fully into memory for parsing. Typical books are a few MB; a very large illustrated EPUB will use that much memory briefly.
+- Orphan folders (for example after a crash between copying and inserting) are cleaned up by the rollback in normal failures, but there is no startup sweep. A deliberate choice: deleting "unknown" folders automatically would be dangerous if the database were ever replaced by an older copy. A library integrity check is planned for Phase 10.
+
+**Verification performed:** typecheck (main, preload, renderer), lint, formatting, 165 unit tests, production build, and a headless run of the built app (36 checks) against real generated fixtures: EPUBs with and without covers, a duplicate, a real PDF with an Info dictionary, a fake PDF and a text file. It checked every import outcome and message, that PDF.js extracts title, author and cover under the production CSP with no console errors, that the PDF cover really contains the page's content (pixel check), search, sorting, confirmation before removal and file deletion, a real file drop (via the DevTools protocol), that a drop fabricated by page script is ignored, persistence across restarts, and recovery of a PDF left half-processed. **Not covered:** the native file-open dialog (headless runs cannot drive it; its handler is unit-tested with a stand-in) and Windows or macOS (the headless run was on Linux, though file-name handling is tested for Windows-style paths).
+
+## 15. Phase 2 implementation notes
+
+**Opening a book.** The shelf's covers are links to `#/read/<id>`. `ReaderPage` calls `reading:open`, which returns the book and its saved position (or null). `ReadingService.open` marks the book as opened, says plainly if the book or its file is gone, and ignores an unreadable stored position. The page then creates an `EpubAdapter`, which fetches the file over `book://`, hands the bytes to EPUB.js (so EPUB.js makes no requests of its own), builds the contents, and shows the saved position or the start. PDFs show a "coming in the next phase" notice for now.
+
+**Saving.** See §7 and ADR 0007. `ReadingStateRepository` keeps one row per book and replaces it on each save. `ReadingService.save` refuses a position of the wrong format for the book. `flush.ts` is the main side of the close handshake; it takes its IPC bus as a parameter so the timeout, the sender check and listener clean-up are unit-tested without Electron.
+
+**Reader screen.** `features/reader/`: `ReaderPage` (toolbar, reading column of about 780 px for a comfortable line length, progress footer, page-turn edges, loading/error/PDF notices), `TocPanel` (a drawer over the page, so opening it never re-flows the text), `keys.ts` (arrows, Page Up/Down, Space and Shift+Space turn pages; T toggles contents; Escape closes it), `chapters.ts` (progress estimate, contents-link resolution, current-chapter lookup) and `positionSaver.ts`. Keys pressed inside the book never reach the page, so the adapter forwards them.
+
+**Layout must stay still.** The reading area's size must not change after the first page is shown, or the position drifts (ADR 0007). The progress line reserves its height from the start. Resizing is handled in `EpubAdapter` by re-anchoring to the remembered place once resizing pauses.
+
+**Known limitations** (deliberate, to be revisited where noted):
+
+- Progress is an estimate (every file in the book counts the same). Exact progress arrives in Phase 4.
+- A hard kill can lose the last ~0.4 s of page turns (the debounce). Closing normally loses nothing.
+- Links inside a book to a website open in the system browser; other link types (for example `mailto:`) do nothing. Links between chapters are handled by EPUB.js and were not covered by the end-to-end test.
+- Reading text uses one fixed light style. Fonts, sizes and themes arrive in Phase 5; bedtime mode in Phase 9.
+- While the window is being dragged to a new size the text can briefly show a provisional place before settling on the right one.
+- The whole reader code (including EPUB.js) is in the main bundle, which makes the first load heavier than needed. It can be split off later if start-up time matters.
+- Fixed-layout EPUBs (comics, some textbooks) are shown with the same paginated flow and were not tested.
+
+**Verification performed:** typecheck (main, preload, renderer), lint, formatting, 206 unit tests, production build, and a headless run of the built app (46 checks, plus the Phase 1 run as a regression check) against generated multi-chapter EPUBs, one with its contents in a sub-folder. It covered: opening from the shelf, every navigation key and button, the contents drawer, a book's own stylesheet and image, a script inside a book being refused, progress and the saved position in the database, **`kill -9` followed by reopening on exactly the same page**, closing the window within milliseconds of a page turn and reopening on that page, staying on the same text after making the window narrower and wider, leaving to the shelf and coming back, a PDF notice, a missing book file, an unknown book address, database integrity, and no console or policy errors. The window was closed with the DevTools `Browser.close` command, which goes through the same `close` path as the window's close button. **Not covered:** Windows and macOS (everything ran on Linux), clicking the real close button or using Cmd+Q, EPUBs from real publishers (only generated fixtures, so unusual markup, DRM-free but heavily styled books and very large books are untested), and links between chapters.

@@ -1,6 +1,6 @@
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { resolveLibraryUrl } from '@main/libraryUrl'
+import { libraryUrlFor, resolveLibraryUrl } from '@main/libraryUrl'
 
 const LIB = join('/data', 'library')
 const ID = '123e4567-e89b-12d3-a456-426614174000'
@@ -32,5 +32,14 @@ describe('resolveLibraryUrl', () => {
     ['not a URL', 'nonsense'],
   ])('rejects %s', (_label, url) => {
     expect(resolveLibraryUrl(LIB, url)).toBeNull()
+  })
+})
+
+describe('libraryUrlFor', () => {
+  it('builds URLs that resolveLibraryUrl accepts', () => {
+    for (const file of ['book.epub', 'book.pdf', 'cover.jpg', 'cover.png', 'cover.webp']) {
+      const url = libraryUrlFor(`${ID}/${file}`)
+      expect(resolveLibraryUrl(LIB, url)).toBe(join(LIB, ID, file))
+    }
   })
 })

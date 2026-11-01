@@ -1,0 +1,42 @@
+.empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: var(--color-text-muted);
+}
+
+.empty h2 {
+  margin: 0 0 var(--space-2);
+  font-family: var(--font-reading);
+  font-size: 22px;
+  color: var(--color-text);
+}
+
+.empty p {
+  margin: 0 0 var(--space-4);
+}
+
+.empty button {
+  height: 38px;
+  padding: 0 var(--space-5);
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--color-accent);
+  color: #fffdf8;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.empty button:disabled {
+  opacity: 0.65;
+  cursor: progress;
+}
+
+.empty button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
