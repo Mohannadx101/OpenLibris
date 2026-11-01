@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
+  continueReading,
   formatFileSize,
   hueForTitle,
   matchesQuery,
+  progressLabel,
   visibleBooks,
 } from '@renderer/features/library/shelf'
 import { summarize } from '@renderer/features/library/importSummary'
@@ -20,6 +22,7 @@ const book = (overrides: Partial<Book>): Book => ({
   addedAt: 0,
   lastOpenedAt: null,
   needsEnrichment: false,
+  progress: null,
   ...overrides,
 })
 
@@ -154,5 +157,62 @@ describe('PDF text cleanup', () => {
     expect(cleanPdfAuthor('')).toBeNull()
     expect(cleanPdfAuthor(undefined)).toBeNull()
     expect(cleanPdfAuthor(' Ursula K. Le Guin ')).toBe('Ursula K. Le Guin')
+  })
+})
+
+describe('sorting by recently opened', () => {
+  const books = [
+    book({ id: 'a', title: 'A', addedAt: 1, lastOpenedAt: 100 }),
+    book({ id: 'b', title: 'B', addedAt: 2, lastOpenedAt: 300 }),
+    book({ id: 'c', title: 'C', addedAt: 3, lastOpenedAt: null }),
+    book({ id: 'd', title: 'D', addedAt: 4, lastOpenedAt: null }),
+  ]
+
+  it('puts the latest first and never-opened books last, newest added first', () => {
+    expect(visibleBooks(books, '', 'opened').map((b) => b.id)).toEqual(['b', 'a', 'd', 'c'])
+  })
+})
+
+describe('continueReading', () => {
+  const started = (id: string, progress: number | null, lastOpenedAt: number | null) =>
+    book({ id, progress, lastOpenedAt })
+
+  it('offers started, unfinished books, most recently opened first', () => {
+    const books = [
+      started('old', 0.2, 100),
+      started('new', 0.7, 500),
+      started('done', 1, 900),
+      started('fresh', null, null),
+      started('zero', 0, 300),
+    ]
+    expect(continueReading(books, 10).map((b) => b.id)).toEqual(['new', 'old'])
+  })
+
+  it('respects the limit', () => {
+    const books = [started('a', 0.1, 1), started('b', 0.1, 2), started('c', 0.1, 3)]
+    expect(continueReading(books, 2).map((b) => b.id)).toEqual(['c', 'b'])
+  })
+
+  it('does not change the input order', () => {
+    const books = [started('a', 0.1, 1), started('b', 0.1, 2)]
+    continueReading(books, 5)
+    expect(books.map((b) => b.id)).toEqual(['a', 'b'])
+  })
+})
+
+describe('progressLabel', () => {
+  it('is empty for unread books', () => {
+    expect(progressLabel(null)).toBeNull()
+    expect(progressLabel(0)).toBeNull()
+  })
+
+  it('shows whole percentages and never rounds up to 100', () => {
+    expect(progressLabel(0.004)).toBe('1%')
+    expect(progressLabel(0.426)).toBe('42%')
+    expect(progressLabel(0.999)).toBe('99%')
+  })
+
+  it('says finished only at the very end', () => {
+    expect(progressLabel(1)).toBe('Finished')
   })
 })

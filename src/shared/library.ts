@@ -17,6 +17,8 @@ export const bookSchema = z.object({
   lastOpenedAt: z.number().nullable(),
   /** True for a PDF whose title/author/cover the renderer has yet to extract. */
   needsEnrichment: z.boolean(),
+  /** How far the reader has got, 0..1. Null until the book has been read. */
+  progress: z.number().min(0).max(1).nullable(),
 })
 export type Book = z.infer<typeof bookSchema>
 

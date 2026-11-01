@@ -124,10 +124,11 @@ PdfAdapter: continuous scroll, lazy page rendering, text layer, zoom, TOC from o
 **Done when:** a 500-page PDF opens quickly, scrolls smoothly, and restores position across restarts and zoom changes.
 **Result:** met in the running app on generated 60- and 500-page PDFs: pages appear within about a second, only a handful of pages exist at a time, the position survives zoom, window resizing and `kill -9`, and the outline drawer jumps to the right page. Scroll smoothness on a real, image-heavy 500-page book was not measured. The WebAssembly image decoders (JPEG 2000, JBIG2) are still off, so PDFs that depend on them show blank images. See `ARCHITECTURE.md` §16.
 
-## Phase 4 — Progress tracking
+## Phase 4 — Progress tracking ✅ done
 
 EPUB location index generated once and cached; progress bar in reader; progress indicator and "continue reading" on the shelf; last-opened sorting.
 **Done when:** shelf shows accurate % for every book after reading.
+**Result:** met in the running app on an EPUB with deliberately uneven chapters: the start of a long second chapter reads 2% (the old estimate said 25%), the third chapter 97%, the last page 100%; the shelf shows the same percentage as the reader, after a restart too. The index is built once in the background and stored. Time to build the index on a very large real EPUB was not measured. See `ARCHITECTURE.md` §17.
 
 ## Phase 5 — Reading comfort
 

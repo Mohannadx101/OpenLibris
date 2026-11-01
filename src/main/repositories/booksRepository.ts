@@ -15,9 +15,11 @@ export interface BookRecord {
   addedAt: number
   lastOpenedAt: number | null
   needsEnrichment: boolean
+  /** How far the reader has got, 0..1, or null if the book has never been read. */
+  progress: number | null
 }
 
-export type NewBook = Omit<BookRecord, 'lastOpenedAt'>
+export type NewBook = Omit<BookRecord, 'lastOpenedAt' | 'progress'>
 
 export interface BookMetadataUpdate {
   title: string
@@ -41,6 +43,7 @@ interface BookRow {
   added_at: number
   last_opened_at: number | null
   needs_enrichment: number
+  progress: number | null
 }
 
 function toRecord(row: BookRow): BookRecord {
@@ -57,6 +60,7 @@ function toRecord(row: BookRow): BookRecord {
     addedAt: row.added_at,
     lastOpenedAt: row.last_opened_at,
     needsEnrichment: row.needs_enrichment === 1,
+    progress: row.progress,
   }
 }
 
@@ -77,9 +81,11 @@ export class BooksRepository {
        VALUES (@id, @contentHash, @format, @title, @author, @language, @filePath,
                @coverPath, @fileSize, @addedAt, @needsEnrichment)`,
     )
-    this.selectAll = db.prepare('SELECT * FROM books ORDER BY added_at DESC, id')
-    this.selectById = db.prepare('SELECT * FROM books WHERE id = ?')
-    this.selectByHash = db.prepare('SELECT * FROM books WHERE content_hash = ?')
+    const withProgress = `SELECT books.*, reading_state.progress AS progress FROM books
+       LEFT JOIN reading_state ON reading_state.book_id = books.id`
+    this.selectAll = db.prepare(`${withProgress} ORDER BY books.added_at DESC, books.id`)
+    this.selectById = db.prepare(`${withProgress} WHERE books.id = ?`)
+    this.selectByHash = db.prepare(`${withProgress} WHERE books.content_hash = ?`)
     this.deleteStmt = db.prepare('DELETE FROM books WHERE id = ?')
     this.updateStmt = db.prepare(
       `UPDATE books SET title = @title, author = @author, language = @language,

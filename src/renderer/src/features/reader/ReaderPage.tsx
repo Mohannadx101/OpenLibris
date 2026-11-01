@@ -64,7 +64,19 @@ export function ReaderPage() {
 
         const isPdf = opened.book.format === 'pdf'
         setZoomable(isPdf)
-        adapter = isPdf ? new PdfAdapter(container) : new EpubAdapter(container)
+        adapter = isPdf
+          ? new PdfAdapter(container)
+          : new EpubAdapter(container, {
+              locations: opened.locations,
+              onLocationsBuilt: (data) => {
+                api.reading
+                  .saveLocations({ bookId: id, data })
+                  .then(unwrap)
+                  .catch((error: unknown) =>
+                    console.warn('[reader] could not store the location index', error),
+                  )
+              },
+            })
         adapterRef.current = adapter
         adapter.onKey(handleKey)
         adapter.onPosition((next) => {

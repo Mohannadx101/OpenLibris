@@ -4,6 +4,16 @@ All notable changes to OpenLibris are recorded here, newest first.
 
 ## [Unreleased]
 
+### Phase 4 — Progress tracking
+
+- EPUB progress is now exact: a location index (about one page of text per location) is built in the background the first time a book is read, stored in `epub_locations_cache`, and reused ever after. Until it is ready the old per-file estimate is shown, then replaced.
+- The shelf shows a progress bar on each cover and a percentage (or "Finished") on each card.
+- A "Continue reading" row at the top of the shelf offers up to four started, unfinished books, most recently opened first. It is hidden while searching.
+- New sort: Recently opened (books never opened go last).
+- Books now carry `progress` (joined from `reading_state`); new IPC channel `reading:saveLocations`; `reading:open` also returns the stored index.
+- 19 new unit tests; headless end-to-end run on an EPUB with uneven chapters (20 checks).
+- Not yet: index build time on very large books is unmeasured; "Finished" is only shown once the very last page has been reached.
+
 ### Phase 3 — PDF reader and position restore
 
 - PDFs now open from the shelf in a continuously scrolling reader: pages are drawn only when near the screen and freed when far away, so a 500-page book opens at once and uses bounded memory. Selectable text sits over each page.

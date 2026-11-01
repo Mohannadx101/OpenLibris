@@ -30,6 +30,8 @@ export const openedBookSchema = z.object({
   book: bookSchema,
   /** Null for a book that has never been opened. */
   state: readingStateSchema.nullable(),
+  /** The saved EPUB location index (a JSON array of CFIs), or null if not built yet. */
+  locations: z.string().nullable(),
 })
 export type OpenedBook = z.infer<typeof openedBookSchema>
 
@@ -39,3 +41,12 @@ export const savePositionSchema = z.object({
   progress: progressSchema,
 })
 export type SavePositionInput = z.infer<typeof savePositionSchema>
+
+/** Largest location index main will store. A very long book is a few hundred kilobytes. */
+export const MAX_LOCATIONS_BYTES = 8 * 1024 * 1024
+
+export const saveLocationsSchema = z.object({
+  bookId: z.string().uuid(),
+  data: z.string().min(2).max(MAX_LOCATIONS_BYTES),
+})
+export type SaveLocationsInput = z.infer<typeof saveLocationsSchema>

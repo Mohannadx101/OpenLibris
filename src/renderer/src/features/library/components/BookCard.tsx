@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { Book } from '@shared/library'
-import { formatFileSize } from '../shelf'
+import { formatFileSize, progressLabel } from '../shelf'
 import { CoverPlaceholder } from './CoverPlaceholder'
 import styles from './BookCard.module.css'
 
@@ -9,6 +9,7 @@ export function BookCard({ book, onRemove }: { book: Book; onRemove: (book: Book
   // A cover file that fails to load (deleted, corrupt) falls back to the placeholder.
   const [coverFailed, setCoverFailed] = useState(false)
   const showImage = book.coverUrl !== null && !coverFailed
+  const progress = progressLabel(book.progress)
 
   return (
     <li className={styles.card}>
@@ -32,6 +33,21 @@ export function BookCard({ book, onRemove }: { book: Book; onRemove: (book: Book
           )}
         </Link>
         <span className={styles.format}>{book.format.toUpperCase()}</span>
+        {progress !== null && (
+          <div
+            className={styles.progress}
+            role="progressbar"
+            aria-label={`Progress in ${book.title}`}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.floor((book.progress ?? 0) * 100)}
+          >
+            <div
+              className={styles.progressFill}
+              style={{ width: `${(book.progress ?? 0) * 100}%` }}
+            />
+          </div>
+        )}
         <button
           type="button"
           className={styles.remove}
@@ -48,7 +64,11 @@ export function BookCard({ book, onRemove }: { book: Book; onRemove: (book: Book
         </h2>
         <p className={styles.author}>{book.author ?? 'Unknown author'}</p>
         <p className={styles.meta}>
-          {book.needsEnrichment ? 'Reading book details…' : formatFileSize(book.fileSize)}
+          {book.needsEnrichment
+            ? 'Reading book details…'
+            : progress !== null
+              ? `${progress} · ${formatFileSize(book.fileSize)}`
+              : formatFileSize(book.fileSize)}
         </p>
       </div>
     </li>

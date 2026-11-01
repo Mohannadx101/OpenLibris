@@ -15,5 +15,6 @@ export function toBook(record: BookRecord): Book {
     addedAt: record.addedAt,
     lastOpenedAt: record.lastOpenedAt,
     needsEnrichment: record.needsEnrichment,
+    progress: record.progress,
   }
 }

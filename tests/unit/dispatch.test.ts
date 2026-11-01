@@ -26,6 +26,7 @@ function makeHandlers(overrides: Partial<Handlers> = {}): Handlers {
       throw new Error('not used')
     },
     'reading:save': () => null,
+    'reading:saveLocations': () => null,
     ...overrides,
   }
 }

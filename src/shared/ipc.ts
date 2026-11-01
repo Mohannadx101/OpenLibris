@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { bookSchema, importResultSchema, pdfMetadataSchema } from './library'
-import { openedBookSchema, savePositionSchema } from './reading'
+import { openedBookSchema, saveLocationsSchema, savePositionSchema } from './reading'
 
 /**
  * The single source of truth for every IPC channel.
@@ -57,6 +57,11 @@ export const ipcSchemas = {
   },
   'reading:save': {
     request: savePositionSchema,
+    response: z.null(),
+  },
+  /** Stores the EPUB location index so it is built once per book. */
+  'reading:saveLocations': {
+    request: saveLocationsSchema,
     response: z.null(),
   },
 } as const

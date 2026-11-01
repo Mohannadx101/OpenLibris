@@ -34,5 +34,6 @@ export interface OpenLibrisApi {
   reading: {
     open(request: IpcRequest<'reading:open'>): Promise<Result<OpenedBook>>
     save(request: IpcRequest<'reading:save'>): Promise<Result<null>>
+    saveLocations(request: IpcRequest<'reading:saveLocations'>): Promise<Result<null>>
   }
 }

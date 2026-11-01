@@ -77,6 +77,7 @@ const api: OpenLibrisApi = {
   reading: {
     open: (request) => invoke('reading:open', request),
     save: (request) => invoke('reading:save', request),
+    saveLocations: (request) => invoke('reading:saveLocations', request),
   },
 }
 

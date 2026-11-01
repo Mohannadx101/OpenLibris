@@ -8,6 +8,7 @@ import { createHandlers } from './ipc/handlers'
 import { registerIpcHandlers } from './ipc/register'
 import { ensureAppDirs, resolveAppPaths } from './paths'
 import { BooksRepository } from './repositories/booksRepository'
+import { LocationsRepository } from './repositories/locationsRepository'
 import { ReadingStateRepository } from './repositories/readingStateRepository'
 import { LibraryService } from './services/library/libraryService'
 import { ReadingService } from './services/reading/readingService'
@@ -52,6 +53,7 @@ function bootstrap(): () => BrowserWindow {
   const reading = new ReadingService({
     books,
     reading: new ReadingStateRepository(db),
+    locations: new LocationsRepository(db),
     libraryDir: paths.libraryDir,
   })
   registerIpcHandlers(

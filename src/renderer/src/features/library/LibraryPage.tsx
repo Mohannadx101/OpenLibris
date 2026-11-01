@@ -8,7 +8,7 @@ import { EmptyState } from './components/EmptyState'
 import { ErrorBanner } from './components/ErrorBanner'
 import { ImportReport } from './components/ImportReport'
 import { LibraryToolbar } from './components/LibraryToolbar'
-import { visibleBooks } from './shelf'
+import { continueReading, visibleBooks } from './shelf'
 import type { SortKey } from './shelf'
 import { useLibrary } from './store'
 import styles from './LibraryPage.module.css'
@@ -76,6 +76,9 @@ export function LibraryPage() {
 
   const shown = useMemo(() => visibleBooks(books, query, sort), [books, query, sort])
 
+  // Only offered on the whole library: while searching, the results are what matters.
+  const resumable = useMemo(() => (query.trim() ? [] : continueReading(books, 4)), [books, query])
+
   const confirmRemoval = useCallback(
     (book: Book) => {
       setPendingRemoval(null)
@@ -113,6 +116,15 @@ export function LibraryPage() {
         <EmptyState filtered importing={importing} onAddBooks={() => void importFromDialog()} />
       ) : (
         <div className={styles.scroll}>
+          {resumable.length > 0 && (
+            <section className={styles.continue} aria-labelledby="continue-heading">
+              <h2 id="continue-heading" className={styles.sectionHeading}>
+                Continue reading
+              </h2>
+              <Bookshelf books={resumable} onRemove={setPendingRemoval} />
+            </section>
+          )}
+          {resumable.length > 0 && <h2 className={styles.sectionHeading}>All books</h2>}
           <Bookshelf books={shown} onRemove={setPendingRemoval} />
         </div>
       )}

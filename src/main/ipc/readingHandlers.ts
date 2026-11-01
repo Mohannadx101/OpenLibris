@@ -15,5 +15,10 @@ export function createReadingHandlers(
       deps.reading.save(input)
       return null
     },
+
+    'reading:saveLocations': (input) => {
+      deps.reading.saveLocations(input)
+      return null
+    },
   }
 }

@@ -34,7 +34,7 @@ afterEach(() => db.close())
 describe('BooksRepository', () => {
   it('round-trips a book', () => {
     books.insert(sample())
-    expect(books.get('id-1')).toEqual({ ...sample(), lastOpenedAt: null })
+    expect(books.get('id-1')).toEqual({ ...sample(), lastOpenedAt: null, progress: null })
   })
 
   it('stores the enrichment flag as a boolean', () => {
@@ -126,5 +126,32 @@ describe('BooksRepository', () => {
     books.delete('id-1')
     const row = db.prepare('SELECT COUNT(*) AS n FROM reading_state').get() as { n: number }
     expect(row.n).toBe(0)
+  })
+})
+
+describe('BooksRepository reading progress', () => {
+  const locator = JSON.stringify({ format: 'epub', cfi: 'epubcfi(/6/2)' })
+  const save = (id: string, progress: number) =>
+    db
+      .prepare(
+        'INSERT INTO reading_state (book_id, locator, progress, updated_at) VALUES (?, ?, ?, 1)',
+      )
+      .run(id, locator, progress)
+
+  it('is null for a book that has never been read', () => {
+    books.insert(sample())
+    expect(books.get('id-1')?.progress).toBeNull()
+    expect(books.list()[0]?.progress).toBeNull()
+  })
+
+  it('comes from the saved reading state, in lists, lookups and hash searches', () => {
+    books.insert(sample())
+    books.insert(sample({ id: 'id-2', contentHash: 'h2', addedAt: 2000 }))
+    save('id-1', 0.4)
+    expect(books.get('id-1')?.progress).toBe(0.4)
+    expect(books.findByHash('hash-1')?.progress).toBe(0.4)
+    expect(books.findByHash('h2')?.progress).toBeNull()
+    const byId = Object.fromEntries(books.list().map((b) => [b.id, b.progress]))
+    expect(byId).toEqual({ 'id-1': 0.4, 'id-2': null })
   })
 })

@@ -117,3 +117,18 @@
   color: var(--color-text-muted);
   opacity: 0.8;
 }
+
+.progress {
+  pointer-events: none;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 5px;
+  background: rgb(0 0 0 / 0.35);
+}
+
+.progressFill {
+  height: 100%;
+  background: var(--color-accent);
+}

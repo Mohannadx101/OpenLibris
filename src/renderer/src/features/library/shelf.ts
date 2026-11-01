@@ -1,9 +1,10 @@
 import type { Book } from '@shared/library'
 
-export type SortKey = 'recent' | 'title' | 'author'
+export type SortKey = 'recent' | 'opened' | 'title' | 'author'
 
 export const SORT_LABELS: Record<SortKey, string> = {
   recent: 'Recently added',
+  opened: 'Recently opened',
   title: 'Title',
   author: 'Author',
 }
@@ -22,6 +23,16 @@ function compare(a: Book, b: Book, sort: SortKey): number {
   switch (sort) {
     case 'recent':
       return b.addedAt - a.addedAt || collator.compare(a.title, b.title)
+    case 'opened': {
+      // Books never opened go last, in the order they were added.
+      if (a.lastOpenedAt === null && b.lastOpenedAt !== null) return 1
+      if (a.lastOpenedAt !== null && b.lastOpenedAt === null) return -1
+      return (
+        (b.lastOpenedAt ?? 0) - (a.lastOpenedAt ?? 0) ||
+        b.addedAt - a.addedAt ||
+        collator.compare(a.title, b.title)
+      )
+    }
     case 'title':
       return collator.compare(a.title, b.title)
     case 'author': {
@@ -58,4 +69,25 @@ export function formatFileSize(bytes: number): string {
     unit++
   }
   return `${value >= 10 ? Math.round(value) : value.toFixed(1)} ${units[unit]}`
+}
+
+/** The books to offer under "Continue reading": started but not finished, latest first. */
+export function continueReading(books: readonly Book[], limit: number): Book[] {
+  return books
+    .filter(
+      (book) =>
+        book.lastOpenedAt !== null &&
+        book.progress !== null &&
+        book.progress > 0 &&
+        book.progress < 1,
+    )
+    .sort((a, b) => (b.lastOpenedAt ?? 0) - (a.lastOpenedAt ?? 0))
+    .slice(0, limit)
+}
+
+/** "42%", "Finished", or null for a book that has not been started. Never rounds up to 100%. */
+export function progressLabel(progress: number | null): string | null {
+  if (progress === null || progress <= 0) return null
+  if (progress >= 1) return 'Finished'
+  return `${Math.min(99, Math.max(1, Math.floor(progress * 100)))}%`
 }

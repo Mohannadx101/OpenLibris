@@ -266,7 +266,7 @@ Any failure after step 3 deletes the new folder, so a failed import leaves nothi
 
 **Known limitations** (deliberate, to be revisited where noted):
 
-- Progress is an estimate (every file in the book counts the same). Exact progress arrives in Phase 4.
+- Progress is an estimate (every file in the book counts the same) until the location index is ready; from Phase 4 it is exact (see §17).
 - A hard kill can lose the last ~0.4 s of page turns (the debounce). Closing normally loses nothing.
 - Links inside a book to a website open in the system browser; other link types (for example `mailto:`) do nothing. Links between chapters are handled by EPUB.js and were not covered by the end-to-end test.
 - Reading text uses one fixed light style. Fonts, sizes and themes arrive in Phase 5; bedtime mode in Phase 9.
@@ -297,3 +297,19 @@ Any failure after step 3 deletes the new folder, so a failed import leaves nothi
 - No in-document search (not planned for this phase).
 
 **Verification performed:** typecheck, lint, 223 unit tests (17 new; 222 pass, and one older `security.test.ts` case fails on Windows because it builds a POSIX `file:///` path, which fails identically without this phase's changes), production build, and a headless run of the built app on Windows against generated 60- and 500-page PDFs with an outline, driven over the DevTools protocol: first page and text layer shown, pages drawn lazily and bounded, outline jump, fractional scroll kept across two zoom steps and a window-width change, next-screen button, no console errors, and `kill -9` followed by reopening on the same page and offset with the page's pixels and text present. **Not covered:** macOS, real-world PDFs (scanned, encrypted, very large), touch and trackpad pinch.
+
+## 17. Phase 4 implementation notes
+
+**Exact EPUB progress.** EPUB.js can divide a book into evenly sized "locations" (this app uses 1024 characters each, about a page) and turn any position into a fraction of the whole text. Building that index loads every chapter, so it runs once, in the background, after the first page is shown:
+
+1. `reading:open` returns the stored index (`locations`, a JSON array of CFIs) or null.
+2. `EpubAdapter` loads it; if there is none, or it cannot be read, it builds one, then hands it to the screen, which stores it with `reading:saveLocations`. Main checks that it is a non-empty JSON array of strings, that the book is an EPUB, and caps its size at 8 MB.
+3. Until the index is ready, progress is the Phase 2 estimate. When it becomes ready the current position is reported again with the exact fraction, which also updates the saved progress. The last page of the book is always 100%.
+
+The index is tied to the book id; a library copy of a book never changes, so there is no invalidation. If the index cannot be built, progress simply stays an estimate and reading is unaffected. PDF progress was already exact (§16).
+
+**Shelf.** `BooksRepository` joins `reading_state`, so `Book.progress` is null until the book has been read. `shelf.ts` holds the pure logic (`continueReading`, `progressLabel`, the "Recently opened" order), covered by unit tests. A book in "Continue reading" also appears in the full list below; the percentage is floored and never shows 100% before "Finished".
+
+**Known limitations.** Index build time on a very large EPUB is unmeasured (it does not block reading). Progress shown on the shelf is as of the last save, so a book still open in the reader shows its latest saved value when the shelf loads. Finished books are not separated from the rest.
+
+**Verification performed:** typecheck, lint, formatting, 242 unit tests (19 new; the one `security.test.ts` failure on Windows predates Phase 3 and is unrelated), production build, and a headless run of the built app on Windows (20 checks) with an EPUB whose chapters differ greatly in length: no index before the first read, index built and stored after it, 2% at the start of the long chapter (estimate would say 25%), 97% at chapter three, 100% on the last page, shelf bar, percentage and Continue-reading row, the new sort option, search hiding the row, and the index and percentage surviving a force-kill and restart, with no console errors. **Not covered:** macOS, real-world EPUBs (large, image-heavy, fixed-layout), and the PDF path of the shelf bar beyond a book with no progress.

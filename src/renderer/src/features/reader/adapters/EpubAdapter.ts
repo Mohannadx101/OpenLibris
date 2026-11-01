@@ -20,6 +20,16 @@ const READING_STYLES = {
   'img, svg': { 'max-width': '100% !important', 'max-height': '96vh !important' },
 }
 
+/** Characters per location. About a page of text, so one location is about one screen. */
+const CHARS_PER_LOCATION = 1024
+
+export interface EpubAdapterOptions {
+  /** A saved location index (JSON), or null if the book has never had one built. */
+  locations: string | null
+  /** Called once with a freshly built index, so it can be stored and never built again. */
+  onLocationsBuilt?: (data: string) => void
+}
+
 /** The pieces of epubjs that exist at runtime but are missing from its type definitions. */
 interface BookInternals {
   spine: { length?: number }
@@ -39,10 +49,15 @@ export class EpubAdapter implements ReaderAdapter {
   private ready = false
   private destroyed = false
   private latest: ReaderPosition | null = null
+  private lastLocation: Location | null = null
+  private locationsReady = false
   private readonly positionListeners = new Set<(position: ReaderPosition) => void>()
   private readonly keyListeners = new Set<(key: ReaderKey) => void>()
 
-  constructor(private readonly container: HTMLElement) {}
+  constructor(
+    private readonly container: HTMLElement,
+    private readonly options: EpubAdapterOptions = { locations: null },
+  ) {}
 
   async open(url: string, initial: Locator | null): Promise<void> {
     const response = await fetch(url)
@@ -96,6 +111,8 @@ export class EpubAdapter implements ReaderAdapter {
     if (this.latest) this.emitPosition(this.latest)
 
     this.watchContainerSize()
+    // Exact progress is not needed to read, so it is built in the background.
+    void this.prepareLocations(book)
   }
 
   next(): Promise<void> {
@@ -147,25 +164,67 @@ export class EpubAdapter implements ReaderAdapter {
     }
     this.rendition = null
     this.book = null
+    this.lastLocation = null
+  }
+
+  /**
+   * Builds (or loads) the location index: a list of evenly sized places through the whole book,
+   * which turns a position into a true fraction of the text. Until it is ready, progress is the
+   * rough per-file estimate; once ready, the current position is reported again with the exact one.
+   */
+  private async prepareLocations(book: Book): Promise<void> {
+    const locations = book.locations
+    try {
+      let loaded = false
+      if (this.options.locations) {
+        try {
+          loaded = locations.load(this.options.locations).length > 0
+        } catch (error) {
+          console.warn('[reader] the saved location index is unreadable, rebuilding it', error)
+        }
+      }
+      if (!loaded) {
+        await locations.generate(CHARS_PER_LOCATION)
+        if (this.destroyed) return
+        if (locations.length() === 0) return
+        this.options.onLocationsBuilt?.(locations.save())
+      }
+    } catch (error) {
+      // Progress stays an estimate; reading is unaffected.
+      console.warn('[reader] could not build the location index', error)
+      return
+    }
+    if (this.destroyed) return
+    this.locationsReady = true
+    if (this.lastLocation) this.handleRelocated(this.lastLocation)
   }
 
   private handleRelocated(location: Location): void {
     const start = location.start
     if (!start?.cfi) return
+    this.lastLocation = location
 
     this.latest = {
       locator: { format: 'epub', cfi: start.cfi },
-      progress: estimateProgress({
-        spineIndex: start.index,
-        spineLength: this.spineLength,
-        page: start.displayed?.page ?? 1,
-        pageCount: start.displayed?.total ?? 0,
-        atEnd: location.atEnd,
-      }),
+      progress: this.locationsReady
+        ? this.exactProgress(start.cfi, location.atEnd)
+        : estimateProgress({
+            spineIndex: start.index,
+            spineLength: this.spineLength,
+            page: start.displayed?.page ?? 1,
+            pageCount: start.displayed?.total ?? 0,
+            atEnd: location.atEnd,
+          }),
       href: start.href ?? null,
     }
     // While the window is being resized, EPUB.js reports places that are only provisional.
     if (this.ready && !this.resizing) this.emitPosition(this.latest)
+  }
+
+  private exactProgress(cfi: string, atEnd: boolean): number {
+    if (atEnd) return 1
+    const fraction = this.book?.locations.percentageFromCfi(cfi) ?? 0
+    return Number.isFinite(fraction) ? Math.min(Math.max(fraction, 0), 1) : 0
   }
 
   private emitPosition(position: ReaderPosition): void {

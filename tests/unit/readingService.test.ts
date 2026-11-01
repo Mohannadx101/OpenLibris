@@ -7,6 +7,7 @@ import { loadBundledMigrations, runMigrations } from '@main/db/migrate'
 import { createReadingHandlers } from '@main/ipc/readingHandlers'
 import { dispatch } from '@main/ipc/dispatch'
 import { BooksRepository } from '@main/repositories/booksRepository'
+import { LocationsRepository } from '@main/repositories/locationsRepository'
 import { ReadingStateRepository } from '@main/repositories/readingStateRepository'
 import { ReadingService } from '@main/services/reading/readingService'
 import type { Locator } from '@shared/reading'
@@ -23,6 +24,7 @@ let db: Db
 let temp: ReturnType<typeof makeTempDir>
 let books: BooksRepository
 let states: ReadingStateRepository
+let locations: LocationsRepository
 let clock: number
 let service: ReadingService
 
@@ -53,10 +55,12 @@ beforeEach(() => {
   temp = makeTempDir()
   books = new BooksRepository(db)
   states = new ReadingStateRepository(db)
+  locations = new LocationsRepository(db)
   clock = 5000
   service = new ReadingService({
     books,
     reading: states,
+    locations,
     libraryDir: temp.dir,
     now: () => clock,
   })
@@ -162,6 +166,50 @@ describe('ReadingService.save', () => {
         progress: 0,
       }),
     ).toThrowError(expect.objectContaining({ code: 'NOT_FOUND' }))
+  })
+})
+
+describe('ReadingService location index', () => {
+  const index = JSON.stringify(['epubcfi(/6/2!/4/2/1:0)', 'epubcfi(/6/4!/4/2/1:0)'])
+  const other = JSON.stringify(['epubcfi(/6/8!/4/2/1:0)'])
+  const UNKNOWN = '00000000-0000-4000-8000-0000000000ff'
+
+  it('has none until one is saved, then returns it when the book is opened', () => {
+    expect(service.open(EPUB_ID).locations).toBeNull()
+    service.saveLocations({ bookId: EPUB_ID, data: index })
+    expect(service.open(EPUB_ID).locations).toBe(index)
+  })
+
+  it('replaces an earlier index', () => {
+    service.saveLocations({ bookId: EPUB_ID, data: index })
+    service.saveLocations({ bookId: EPUB_ID, data: other })
+    expect(locations.get(EPUB_ID)).toBe(other)
+  })
+
+  it('never offers one for a PDF, and refuses to store one', () => {
+    expect(service.open(PDF_ID).locations).toBeNull()
+    expect(() => service.saveLocations({ bookId: PDF_ID, data: index })).toThrowError(
+      expect.objectContaining({ code: 'VALIDATION' }),
+    )
+  })
+
+  it.each(['not json', '{}', '[]', '[1,2]', '["a",""]'])('rejects an invalid index: %s', (data) => {
+    expect(() => service.saveLocations({ bookId: EPUB_ID, data })).toThrowError(
+      expect.objectContaining({ code: 'VALIDATION' }),
+    )
+    expect(locations.get(EPUB_ID)).toBeUndefined()
+  })
+
+  it('rejects an unknown book', () => {
+    expect(() => service.saveLocations({ bookId: UNKNOWN, data: index })).toThrowError(
+      expect.objectContaining({ code: 'NOT_FOUND' }),
+    )
+  })
+
+  it('is removed together with its book', () => {
+    service.saveLocations({ bookId: EPUB_ID, data: index })
+    books.delete(EPUB_ID)
+    expect(locations.get(EPUB_ID)).toBeUndefined()
   })
 })
 
