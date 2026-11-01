@@ -5,6 +5,7 @@ import type { SavePositionInput } from '@shared/reading'
 import { api, unwrap } from '@renderer/lib/api'
 import { libraryFileUrl } from '@renderer/lib/libraryUrl'
 import { EpubAdapter } from './adapters/EpubAdapter'
+import { PdfAdapter } from './adapters/PdfAdapter'
 import type { ReaderAdapter, ReaderKey, ReaderPosition, TocItem } from './adapters/ReaderAdapter'
 import { chapterForHref, formatPercent } from './chapters'
 import { TocPanel } from './components/TocPanel'
@@ -12,7 +13,7 @@ import { keyAction } from './keys'
 import { PositionSaver } from './positionSaver'
 import styles from './ReaderPage.module.css'
 
-type Status = 'loading' | 'ready' | 'unsupported' | 'error'
+type Status = 'loading' | 'ready' | 'error'
 
 function isTypingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false
@@ -30,6 +31,8 @@ export function ReaderPage() {
   const [toc, setToc] = useState<TocItem[]>([])
   const [position, setPosition] = useState<ReaderPosition | null>(null)
   const [tocOpen, setTocOpen] = useState(false)
+  const [zoomable, setZoomable] = useState(false)
+  const [zoom, setZoom] = useState(1)
 
   const handleKey = useCallback((key: ReaderKey) => {
     const action = keyAction(key)
@@ -56,14 +59,12 @@ export function ReaderPage() {
         if (cancelled) return
         setBook(opened.book)
 
-        if (opened.book.format !== 'epub') {
-          setStatus('unsupported')
-          return
-        }
         const container = containerRef.current
         if (!container) return
 
-        adapter = new EpubAdapter(container)
+        const isPdf = opened.book.format === 'pdf'
+        setZoomable(isPdf)
+        adapter = isPdf ? new PdfAdapter(container) : new EpubAdapter(container)
         adapterRef.current = adapter
         adapter.onKey(handleKey)
         adapter.onPosition((next) => {
@@ -71,7 +72,10 @@ export function ReaderPage() {
           saver.update({ bookId: id, locator: next.locator, progress: next.progress })
         })
 
-        await adapter.open(libraryFileUrl(id, 'book.epub'), opened.state?.locator ?? null)
+        await adapter.open(
+          libraryFileUrl(id, isPdf ? 'book.pdf' : 'book.epub'),
+          opened.state?.locator ?? null,
+        )
         if (cancelled) return
         setToc(adapter.toc())
         setStatus('ready')
@@ -141,6 +145,38 @@ export function ReaderPage() {
         >
           Contents
         </button>
+        {zoomable && (
+          <div className={styles.zoom} role="group" aria-label="Zoom">
+            <button
+              type="button"
+              className={styles.toolButton}
+              onClick={() => setZoom(adapterRef.current?.zoomOut?.() ?? 1)}
+              disabled={!canRead}
+              aria-label="Zoom out"
+            >
+              −
+            </button>
+            <button
+              type="button"
+              className={styles.toolButton}
+              onClick={() => setZoom(adapterRef.current?.zoomReset?.() ?? 1)}
+              disabled={!canRead}
+              aria-label="Reset zoom to fit width"
+              data-testid="zoom-level"
+            >
+              {Math.round(zoom * 100)}%
+            </button>
+            <button
+              type="button"
+              className={styles.toolButton}
+              onClick={() => setZoom(adapterRef.current?.zoomIn?.() ?? 1)}
+              disabled={!canRead}
+              aria-label="Zoom in"
+            >
+              +
+            </button>
+          </div>
+        )}
         <div className={styles.titleBlock}>
           <span className={styles.title}>{book?.title ?? ''}</span>
           {book?.author && <span className={styles.author}>{book.author}</span>}
@@ -153,7 +189,7 @@ export function ReaderPage() {
           className={`${styles.edge} ${styles.edgeLeft}`}
           onClick={() => void adapterRef.current?.prev()}
           disabled={!canRead}
-          aria-label="Previous page"
+          aria-label={zoomable ? 'Scroll up' : 'Previous page'}
         >
           ‹
         </button>
@@ -167,19 +203,12 @@ export function ReaderPage() {
           className={`${styles.edge} ${styles.edgeRight}`}
           onClick={() => void adapterRef.current?.next()}
           disabled={!canRead}
-          aria-label="Next page"
+          aria-label={zoomable ? 'Scroll down' : 'Next page'}
         >
           ›
         </button>
 
         {status === 'loading' && <div className={styles.notice}>Opening book…</div>}
-        {status === 'unsupported' && (
-          <div className={styles.notice}>
-            <strong>PDF reading is coming in the next phase.</strong>
-            <span>This book is safely in your library and will open here soon.</span>
-            <Link to="/">Back to library</Link>
-          </div>
-        )}
         {status === 'error' && (
           <div className={styles.notice} role="alert">
             <strong>This book could not be opened.</strong>
@@ -214,7 +243,12 @@ export function ReaderPage() {
         </div>
         <div className={styles.status}>
           <span className={styles.chapter}>{chapter?.label ?? ''}</span>
-          <span data-testid="progress-text">{canRead ? formatPercent(progress) : ''}</span>
+          <span data-testid="progress-text">
+            {canRead && position?.locator.format === 'pdf' && position.pageCount
+              ? `Page ${position.locator.page} of ${position.pageCount} · `
+              : ''}
+            {canRead ? formatPercent(progress) : ''}
+          </span>
         </div>
       </footer>
     </div>

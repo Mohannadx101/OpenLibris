@@ -15,6 +15,8 @@ export interface ReaderPosition {
   progress: number
   /** The file (EPUB) the reader is in, used to name the current chapter. */
   href: string | null
+  /** Total pages, for formats that have real ones (PDF). */
+  pageCount?: number
 }
 
 /** A key press forwarded out of the book's own document, where the page cannot see it. */
@@ -43,5 +45,9 @@ export interface ReaderAdapter {
   onKey(listener: (key: ReaderKey) => void): () => void
   /** Tells the adapter its container changed size. */
   resize(): void
+  /** Zoom controls, for formats that have them (PDF). Each returns the new zoom, 1 = fit width. */
+  zoomIn?(): number
+  zoomOut?(): number
+  zoomReset?(): number
   destroy(): void
 }

@@ -1,4 +1,5 @@
 import type { PDFDocumentProxy } from 'pdfjs-dist'
+import { loadPdfJs } from './pdfjs'
 import { cleanPdfAuthor, cleanPdfLanguage, cleanPdfTitle } from './pdfText'
 
 export interface PdfInfo {
@@ -12,15 +13,6 @@ export interface PdfInfo {
 const COVER_WIDTH = 420
 const MAX_SCALE = 3
 const TIMEOUT_MS = 45_000
-
-async function loadPdfJs() {
-  const [pdfjs, worker] = await Promise.all([
-    import('pdfjs-dist'),
-    import('pdfjs-dist/build/pdf.worker.min.mjs?url'),
-  ])
-  pdfjs.GlobalWorkerOptions.workerSrc = worker.default
-  return pdfjs
-}
 
 async function renderCover(doc: PDFDocumentProxy): Promise<Uint8Array<ArrayBuffer> | null> {
   const page = await doc.getPage(1)
@@ -56,7 +48,7 @@ async function readInfo(url: string): Promise<PdfInfo> {
     // Non-embedded fonts fall back to the ones installed on the system.
     useSystemFonts: true,
     // WebAssembly image decoders (JPEG 2000, JBIG2) need extra CSP and bundled files; PDFs that
-    // use them still get a title and author, only the cover may be blank. Revisited in Phase 3.
+    // use them still get a title and author, only the cover may be blank..
     useWasm: false,
   })
 

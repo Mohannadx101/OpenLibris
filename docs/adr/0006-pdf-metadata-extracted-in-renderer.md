@@ -19,4 +19,4 @@ Importing a book should show its real title, author and cover. For EPUB this nee
 - A newly imported PDF briefly shows its file name and a placeholder ("Reading book details…") before the real details appear. Usually under a second.
 - Importing is not fully self-contained in main: a PDF only becomes "complete" while the app window is open. Acceptable for a desktop app whose import always starts from its window.
 - The main process must not trust the renderer's data: it limits sizes, checks image bytes, and only applies the update once per book.
-- PDF.js's WebAssembly image decoders (JPEG 2000, JBIG2) are left off for now. PDFs whose first page depends on them may get a blank cover; title and author are unaffected. Revisit in Phase 3.
+- PDF.js's WebAssembly image decoders (JPEG 2000, JBIG2) are left off for now. PDFs whose first page depends on them may get a blank cover; title and author are unaffected. Still off in the Phase 3 reader.

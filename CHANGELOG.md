@@ -4,6 +4,15 @@ All notable changes to OpenLibris are recorded here, newest first.
 
 ## [Unreleased]
 
+### Phase 3 — PDF reader and position restore
+
+- PDFs now open from the shelf in a continuously scrolling reader: pages are drawn only when near the screen and freed when far away, so a 500-page book opens at once and uses bounded memory. Selectable text sits over each page.
+- Zoom with the toolbar (− / % / +) or Ctrl+wheel; the percentage resets to fit-width. "Page X of N" and exact progress in the footer; contents drawer built from the PDF's outline.
+- The position (page plus how far down it) is saved automatically and restored after a restart or force-quit, and is kept across zoom and window-width changes.
+- Previous/next, Space and Page Up/Down scroll by about a screen; arrow keys up/down scroll natively.
+- 17 new unit tests for the layout maths; headless end-to-end run on generated 60- and 500-page PDFs.
+- Not yet: links inside a PDF, search inside a PDF, PDFs relying on JPEG 2000/JBIG2 images (PDF.js WebAssembly decoders stay off), non-embedded CJK fonts.
+
 ### Phase 2 — EPUB reader and position restore
 
 - Open an EPUB from the shelf (click its cover) and read it as pages. Clean reading column, chapter-aware progress footer, "Contents" drawer, previous/next buttons.

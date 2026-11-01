@@ -23,7 +23,7 @@ export interface CspOptions {
  * `frame-src` stays 'none': `srcdoc` frames are not governed by it, so a book still cannot
  * embed any page.
  *
- * Phase 3 will need `'wasm-unsafe-eval'` for PDF.js image decoders. Widen deliberately, with
+ * The PDF reader (Phase 3) runs without PDF.js's WebAssembly decoders. Enabling them needs `wasm-unsafe-eval`; widen deliberately, with
  * a test, when that happens.
  */
 export function buildContentSecurityPolicy({ dev, devServerOrigin }: CspOptions): string {

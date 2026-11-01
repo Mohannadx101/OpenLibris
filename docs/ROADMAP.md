@@ -118,10 +118,11 @@ ReaderAdapter interface; EpubAdapter (paginated); Reader screen with toolbar, TO
 **Done when:** closing the app mid-chapter (including force-quit after a page turn) and reopening returns to the same page.
 **Result:** met and verified in the running app: after `kill -9` the reader reopens on exactly the same page, and a page turn made a few milliseconds before closing the window is still saved. Also verified: keyboard and button navigation, the contents drawer (including a book whose contents live in a sub-folder), a book's own styles and images, scripts inside a book not running, staying on the same text when the window is resized, and clear messages for a missing book file. Getting the restore exact turned up a subtle EPUB.js layout issue that later phases must respect, recorded in ADR 0007. See `ARCHITECTURE.md` §15 for the design, limitations and exactly what was and was not verified.
 
-## Phase 3 — PDF reader + position restore
+## Phase 3 — PDF reader + position restore ✅ done
 
 PdfAdapter: continuous scroll, lazy page rendering, text layer, zoom, TOC from outline; locator = page + offset.
 **Done when:** a 500-page PDF opens quickly, scrolls smoothly, and restores position across restarts and zoom changes.
+**Result:** met in the running app on generated 60- and 500-page PDFs: pages appear within about a second, only a handful of pages exist at a time, the position survives zoom, window resizing and `kill -9`, and the outline drawer jumps to the right page. Scroll smoothness on a real, image-heavy 500-page book was not measured. The WebAssembly image decoders (JPEG 2000, JBIG2) are still off, so PDFs that depend on them show blank images. See `ARCHITECTURE.md` §16.
 
 ## Phase 4 — Progress tracking
 

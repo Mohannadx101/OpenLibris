@@ -172,3 +172,14 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+.zoom {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.zoom .toolButton {
+  min-width: 32px;
+  text-align: center;
+}

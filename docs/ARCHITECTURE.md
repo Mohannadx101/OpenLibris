@@ -247,7 +247,7 @@ Any failure after step 3 deletes the new folder, so a failed import leaves nothi
 **Known limitations** (deliberate, to be revisited where noted):
 
 - Covers in GIF or SVG (rare in EPUBs) are not served; those books get the generated placeholder. The library only serves JPEG, PNG and WebP.
-- PDFs whose page 1 relies on JPEG 2000 or JBIG2 images may get a blank cover, because PDF.js's WebAssembly decoders are disabled (they need CSP and asset changes). Title and author are unaffected. Revisit in Phase 3 when PDF rendering is built properly.
+- PDFs whose page 1 relies on JPEG 2000 or JBIG2 images may get a blank cover, because PDF.js's WebAssembly decoders are disabled (they need CSP and asset changes). Title and author are unaffected. Still off after Phase 3 (see §16).
 - Import has no per-file progress: the shelf shows "Importing…" until the whole batch finishes. Fine for normal use; worth improving if bulk-importing hundreds of books is common.
 - An EPUB is read fully into memory for parsing. Typical books are a few MB; a very large illustrated EPUB will use that much memory briefly.
 - Orphan folders (for example after a crash between copying and inserting) are cleaned up by the rollback in normal failures, but there is no startup sweep. A deliberate choice: deleting "unknown" folders automatically would be dangerous if the database were ever replaced by an older copy. A library integrity check is planned for Phase 10.
@@ -275,3 +275,25 @@ Any failure after step 3 deletes the new folder, so a failed import leaves nothi
 - Fixed-layout EPUBs (comics, some textbooks) are shown with the same paginated flow and were not tested.
 
 **Verification performed:** typecheck (main, preload, renderer), lint, formatting, 206 unit tests, production build, and a headless run of the built app (46 checks, plus the Phase 1 run as a regression check) against generated multi-chapter EPUBs, one with its contents in a sub-folder. It covered: opening from the shelf, every navigation key and button, the contents drawer, a book's own stylesheet and image, a script inside a book being refused, progress and the saved position in the database, **`kill -9` followed by reopening on exactly the same page**, closing the window within milliseconds of a page turn and reopening on that page, staying on the same text after making the window narrower and wider, leaving to the shelf and coming back, a PDF notice, a missing book file, an unknown book address, database integrity, and no console or policy errors. The window was closed with the DevTools `Browser.close` command, which goes through the same `close` path as the window's close button. **Not covered:** Windows and macOS (everything ran on Linux), clicking the real close button or using Cmd+Q, EPUBs from real publishers (only generated fixtures, so unusual markup, DRM-free but heavily styled books and very large books are untested), and links between chapters.
+
+## 16. Phase 3 implementation notes
+
+**Design.** `PdfAdapter` implements `ReaderAdapter` (the reader screen only gained a branch choosing the adapter and a zoom control). All geometry lives in `pdfLayout.ts` as pure functions, unit-tested.
+
+- **Layout.** Every page's size at scale 1 is measured up front (in batches), so the scroll bar and positions are exact from the start. Every page has a sized placeholder `div`; zoom 1 means "page 1 fits the width", and every page is scaled by the same factor.
+- **Lazy rendering.** Pages within one screen-height of the view are drawn (canvas, at device pixel ratio, capped at 16 M pixels, plus a PDF.js text layer); pages more than three screen-heights away are freed. At most two renders run at once, nearest page first. Render work for a page that was freed or re-laid out is cancelled.
+- **Locator.** `{ page, offsetY }`: the page at the top of the view and the fraction down it (0..1). Independent of zoom and width, so it is the anchor used for zoom, window resizing and restore. A scroll landing within a pixel of a page's top counts as that page's start (browsers round scroll positions).
+- **Zoom.** Preset steps 50%–400% (toolbar and Ctrl+wheel). On zoom the old pictures stay (stretched) until the new ones are drawn, so pages never flash blank.
+- **Progress.** Exact: `(page − 1 + offsetY) / pageCount`, 100% at the bottom of the last page.
+- **Contents.** From the PDF outline; entries whose destination cannot be resolved are dropped. The current chapter is the last entry starting on or before the current page.
+- **Position saving** is unchanged from Phase 2 (`PositionSaver`, close handshake).
+
+**Known limitations.**
+
+- No annotation layer, so links inside a PDF (including contents pages) do nothing; the outline drawer works.
+- PDF.js's WebAssembly decoders (JPEG 2000, JBIG2) remain off. That needs `'wasm-unsafe-eval'` plus serving PDF.js's `wasm/` files; deferred until a real book needs it. Standard-font and CMap data files are not bundled either, so non-embedded CJK fonts fall back to system fonts.
+- Horizontal scroll position is reset to centred on zoom or resize.
+- Scroll smoothness was checked on generated text PDFs only, not on a large scanned or image-heavy book.
+- No in-document search (not planned for this phase).
+
+**Verification performed:** typecheck, lint, 223 unit tests (17 new; 222 pass, and one older `security.test.ts` case fails on Windows because it builds a POSIX `file:///` path, which fails identically without this phase's changes), production build, and a headless run of the built app on Windows against generated 60- and 500-page PDFs with an outline, driven over the DevTools protocol: first page and text layer shown, pages drawn lazily and bounded, outline jump, fractional scroll kept across two zoom steps and a window-width change, next-screen button, no console errors, and `kill -9` followed by reopening on the same page and offset with the page's pixels and text present. **Not covered:** macOS, real-world PDFs (scanned, encrypted, very large), touch and trackpad pinch.
